@@ -904,3 +904,214 @@ describe("Admin endpoints", () => {
     expect(updateElementResponse.statusCode).toBe(200);
   });
 });
+
+describe("Websocket tests", () => {
+  let adminToken;
+  let adminId;
+  let userToken;
+  let userId;
+  let element1Id;
+  let element2Id;
+  let spaceId;
+  let mapId;
+  let ws1;
+  let ws2;
+  let ws1Messsages = [];
+  let ws2Messsages = [];
+
+  async function waitForAndPopLatestMessage(messagesArray) {
+    return new Promise((r) => {
+      if (messagesArray.length > 0) resolve(messagesArray.shift());
+      else {
+        let interval = setInterval(() => {
+          if (messagesArray.length > 0) resolve(messagesArray.shift());
+          clearInterval(interval); //GC
+        }, 100); // Ugly way to wait for message and return if message array is not populated
+      }
+    });
+  }
+
+  async function setupHTTP() {
+    const username = `ashu-${Math.random()}`;
+    const password = "123456";
+    const adminSignupResponse = await axios.post(
+      `${BACKEND_URL}/api/v1/signup`,
+      {
+        username,
+        password,
+        role: "admin",
+      }
+    );
+    const adminSigninResponse = await axios.post(
+      `${BACKEND_URL}/api/v1/signin`,
+      {
+        username,
+        password,
+        // role: "admin",
+      }
+    );
+
+    adminId = adminSignupResponse.data.userId;
+
+    adminToken = adminSigninResponse.data.token;
+
+    const userSignupResponse = await axios.post(
+      `${BACKEND_URL}/api/v1/signup`,
+      {
+        username: username + `-user`,
+        password,
+        role: "user",
+      }
+    );
+    const userSigninResponse = await axios.post(
+      `${BACKEND_URL}/api/v1/signin`,
+      {
+        username: username + `-user`,
+        password,
+        // role: "user",
+      }
+    );
+
+    userId = userSignupResponse.data.userId;
+
+    userToken = userSigninResponse.data.token;
+
+    const element1 = await axios.post(
+      `${BACKEND_URL}/api/v1/admin/element`,
+      {
+        imageUrl:
+          "https://encrypted-tbn0.gstatic.com/shopping?q=tbn:ANd9GcRCRca3wAR4zjPPTzeIY9rSwbbqB6bB2hVkoTXN4eerXOIkJTG1GpZ9ZqSGYafQPToWy_JTcmV5RHXsAsWQC3tKnMlH_CsibsSZ5oJtbakq&usqp=CAE",
+        width: 1,
+        height: 1,
+        static: true, // weather or not the user can sit on top of this element (is it considered as a collission or not)
+      },
+      {
+        headers: {
+          authorization: `Bearer ${adminToken}`,
+        },
+      }
+    );
+    const element2 = await axios.post(
+      `${BACKEND_URL}/api/v1/admin/element`,
+      {
+        imageUrl:
+          "https://encrypted-tbn0.gstatic.com/shopping?q=tbn:ANd9GcRCRca3wAR4zjPPTzeIY9rSwbbqB6bB2hVkoTXN4eerXOIkJTG1GpZ9ZqSGYafQPToWy_JTcmV5RHXsAsWQC3tKnMlH_CsibsSZ5oJtbakq&usqp=CAE",
+        width: 1,
+        height: 1,
+        static: true, // weather or not the user can sit on top of this element (is it considered as a collission or not)
+      },
+      {
+        headers: {
+          authorization: `Bearer ${adminToken}`,
+        },
+      }
+    );
+
+    element1Id = element1?.data.id;
+    element2Id = element2?.data.id;
+    const map = await axios.post(
+      `${BACKEND_URL}/api/v1/admin/map`,
+      {
+        thumbnail: "https://thumbnail.com/a.png",
+        dimensions: "100x200",
+        name: "100 person interview room",
+        defaultElements: [
+          {
+            elementId: element1Id,
+            x: 20,
+            y: 20,
+          },
+          {
+            elementId: element1Id,
+            x: 18,
+            y: 20,
+          },
+          {
+            elementId: element2Id,
+            x: 19,
+            y: 20,
+          },
+        ],
+      },
+      {
+        headers: {
+          authorization: `Bearer ${adminToken}`,
+        },
+      }
+    );
+
+    mapId = map.data.id;
+
+    const space = await axios.post(
+      `${BACKEND_URL}/api/v1/space`,
+      {
+        name: "Test",
+        dimensions: "100x200",
+        mapId: mapId,
+      },
+      {
+        headers: {
+          authorization: `Bearer ${userToken}`,
+        },
+      }
+    );
+    spaceId = space.data.spaceId;
+  }
+
+  async function setupWs() {
+    ws1 = new WebSocket(WS_URL);
+    ws2 = new WebSocket(WS_URL);
+
+    await new Promise((r) => {
+      ws1.onopen = r;
+    });
+
+    await new Promise((r) => {
+      ws2.onopen = r;
+    });
+
+    ws1.onmessage = (event) => {
+      ws1Messsages.push(JSON.parse(event.data)); // you can only pass binary and string
+    };
+    // here ws2.onmessage migth change
+    ws2.onmessage = (event) => {
+      ws2Messsages.push(JSON.parse(event.data)); // you can only pass binary and string
+    };
+  }
+
+  beforeAll(async () => {
+    setupHTTP();
+    setupWs();
+  });
+
+  test("Get back the acknowledgement for joining the space ", async () => {
+    ws1.send(
+      JSON.stringify({
+        type: "join",
+        payload: {
+          spaceId: spaceId,
+          token: adminToken,
+        },
+      })
+    );
+    ws2.send(
+      JSON.stringify({
+        type: "join",
+        payload: {
+          spaceId: spaceId,
+          token: userToken,
+        },
+      })
+    );
+
+    const message1 = await waitForAndPopLatestMessage(ws1Messsages);
+    const message2 = await waitForAndPopLatestMessage(ws2Messsages);
+
+    expect(message1.type).toBe("spcae-joind");
+    expect(message2.type).toBe("spcae-joind");
+
+    expect(message1.payload.users.length + message1.payload.users.length).toBe(
+      1
+    );
+  });
+});
