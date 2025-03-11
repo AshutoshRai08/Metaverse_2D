@@ -918,6 +918,10 @@ describe("Websocket tests", () => {
   let ws2;
   let ws1Messsages = [];
   let ws2Messsages = [];
+  let userX;
+  let userY;
+  let adminX;
+  let adminY;
 
   async function waitForAndPopLatestMessage(messagesArray) {
     return new Promise((r) => {
@@ -1113,5 +1117,10 @@ describe("Websocket tests", () => {
     expect(message1.payload.users.length + message1.payload.users.length).toBe(
       1
     );
+    adminX = message1.payload.spawn.X;
+    adminY = message1.payload.spawn.Y;
+
+    userX = message2.payload.spawn.X;
+    userY = message2.payload.spawn.Y;
   });
 });
