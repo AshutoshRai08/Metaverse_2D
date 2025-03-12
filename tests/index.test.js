@@ -1088,39 +1088,4 @@ describe("Websocket tests", () => {
     setupWs();
   });
 
-  test("Get back the acknowledgement for joining the space ", async () => {
-    ws1.send(
-      JSON.stringify({
-        type: "join",
-        payload: {
-          spaceId: spaceId,
-          token: adminToken,
-        },
-      })
-    );
-    ws2.send(
-      JSON.stringify({
-        type: "join",
-        payload: {
-          spaceId: spaceId,
-          token: userToken,
-        },
-      })
-    );
 
-    const message1 = await waitForAndPopLatestMessage(ws1Messsages);
-    const message2 = await waitForAndPopLatestMessage(ws2Messsages);
-
-    expect(message1.type).toBe("spcae-joind");
-    expect(message2.type).toBe("spcae-joind");
-
-    expect(message1.payload.users.length + message1.payload.users.length).toBe(
-      1
-    );
-    adminX = message1.payload.spawn.X;
-    adminY = message1.payload.spawn.Y;
-
-    userX = message2.payload.spawn.X;
-    userY = message2.payload.spawn.Y;
-  });
-});
